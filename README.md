@@ -58,83 +58,26 @@ The state-variable registry contains the application variables used by the assig
 
 ## Mathematical formulation
 
-Each capability is represented as a fixed-length vector in $\mathbb{R}^{92}$:
+Each capability is represented as a fixed-length vector of 92 values. The vector is organized into subspaces for capability type, operational attributes, preconditions, effects, inputs, outputs, resources, and constraints.
 
-$$
-\mathbf{x}_c = [\mathbf{t}_c, \mathbf{o}_c, \mathbf{p}_c, \mathbf{e}_c, \mathbf{i}_c, \mathbf{y}_c, \mathbf{r}_c, \mathbf{k}_c]
-$$
+The embedding is structured as follows:
 
-where:
+- capability type: 9 dimensions
+- operational attributes: 3 dimensions
+- preconditions: 16 dimensions
+- effects: 16 dimensions
+- inputs: 16 dimensions
+- outputs: 16 dimensions
+- resources: 8 dimensions
+- constraints: 8 dimensions
 
-- $\mathbf{t}_c \in \{0,1\}^{9}$ is the capability-type one-hot vector.
-- $\mathbf{o}_c = [\hat{c}, \rho, \alpha]$ stores normalized cost, reliability, and availability.
-- $\mathbf{p}_c, \mathbf{e}_c \in \{-1,0,1\}^{16}$ encode preconditions and effects over the state-variable registry.
-- $\mathbf{i}_c, \mathbf{y}_c \in \{0,1\}^{16}$ encode required inputs and generated outputs.
-- $\mathbf{r}_c \in \{0,1\}^{8}$ and $\mathbf{k}_c \in \{0,1\}^{8}$ encode resources and constraints.
+The operational attributes contain normalized cost, reliability, and availability. Cost is scaled with a saturating transform so that larger values remain bounded, while reliability and availability remain in the range [0, 1].
 
-The operational attributes are normalized as follows:
+State predicates are mapped to signed values so that true and false conditions are distinguished explicitly. Compatibility for a pipeline C1 -> C2 is checked by ensuring that no effect of C1 contradicts a precondition of C2 and that all required data dependencies of C2 are either produced by C1 or supplied externally.
 
-$$
-\hat{c} = \frac{c}{c + 50}, \quad c \ge 0
-$$
+Sequential composition combines two capabilities into a single capability. The later capability can override shared state variables, while the aggregated cost is the sum of the two components and the reliability/availability values are multiplied.
 
-$$
-\rho = \operatorname{clip}(\rho, 0, 1), \qquad \alpha = \operatorname{clip}(\alpha, 0, 1)
-$$
-
-Boolean state predicates are mapped deterministically into signed values:
-
-$$
-\phi(s) =
-\begin{cases}
-1, & \text{if the predicate is true} \\
--1, & \text{if the predicate is false}
-\end{cases}
-$$
-
-A pipeline $C_1 \rightarrow C_2$ is considered compatible when there is no contradiction between the effects of $C_1$ and the preconditions of $C_2$, and all required inputs of $C_2$ are either produced by $C_1$ or are externally supplied:
-
-$$
-\operatorname{compatible}(C_1, C_2) \iff
-\Big(\forall s,\ e_{C_1}(s) \not\equiv \neg p_{C_2}(s)\Big)
-\land
-\Big(\forall d \in I_{C_2},\ d \in O_{C_1} \;\text{or}\; d \text{ is externally supplied}\Big)
-$$
-
-This formalizes the rule that no upstream effect may invalidate a downstream requirement, and that required data flow remains valid.
-
-Sequential composition combines the two capabilities into a single capability whose downstream effects override shared state variables:
-
-$$
-E_{C_1 + C_2}(s) =
-\begin{cases}
-E_{C_2}(s), & \text{if } s \in \operatorname{dom}(E_{C_2}) \\
-E_{C_1}(s), & \text{otherwise}
-\end{cases}
-$$
-
-with aggregated metrics:
-
-$$
-\text{cost}(C_1 + C_2) = \text{cost}(C_1) + \text{cost}(C_2)
-$$
-
-$$
-\rho_{C_1 + C_2} = \rho_{C_1} \rho_{C_2}, \qquad
-\alpha_{C_1 + C_2} = \alpha_{C_1} \alpha_{C_2}
-$$
-
-Goal relevance is computed by cosine similarity between the effect-only embedding of a capability and the goal embedding:
-
-$$
-\operatorname{sim}(\mathbf{x}, \mathbf{y}) = \frac{\mathbf{x} \cdot \mathbf{y}}{\|\mathbf{x}\|\|\mathbf{y}\|}
-$$
-
-$$
-\operatorname{relevance}(C, G) = \max\left(0, \operatorname{sim}(\mathbf{e}_C, \mathbf{g})\right)
-$$
-
-This yields a score in $[0,1]$: a direct effect match gives $1.0$, and a disjoint effect set gives $0.0$.
+Goal relevance is measured by cosine similarity between the effect-only vector of a capability and the goal vector. This produces a score in the range [0, 1], where a direct match gives 1.0 and a disjoint effect set gives 0.0.
 
 ## Compatibility
 
