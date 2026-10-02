@@ -58,26 +58,47 @@ The state-variable registry contains the application variables used by the assig
 
 ## Mathematical formulation
 
-Each capability is represented as a fixed-length vector of 92 values. The vector is organized into subspaces for capability type, operational attributes, preconditions, effects, inputs, outputs, resources, and constraints.
+Each capability is represented as a fixed-length vector of 92 values:
 
-The embedding is structured as follows:
+- x_c = [t_c, o_c, p_c, e_c, i_c, y_c, r_c, k_c]
+- t_c ∈ {0,1}^9 is the capability-type encoding
+- o_c = [ĉ, ρ, α] stores normalized cost, reliability, and availability
+- p_c, e_c ∈ {-1,0,1}^{16} encode preconditions and effects
+- i_c, y_c ∈ {0,1}^{16} encode required inputs and produced outputs
+- r_c ∈ {0,1}^8 and k_c ∈ {0,1}^8 encode resources and constraints
 
-- capability type: 9 dimensions
-- operational attributes: 3 dimensions
-- preconditions: 16 dimensions
-- effects: 16 dimensions
-- inputs: 16 dimensions
-- outputs: 16 dimensions
-- resources: 8 dimensions
-- constraints: 8 dimensions
+The operational attributes are normalized as follows:
 
-The operational attributes contain normalized cost, reliability, and availability. Cost is scaled with a saturating transform so that larger values remain bounded, while reliability and availability remain in the range [0, 1].
+- ĉ = c / (c + 50), for c ≥ 0
+- ρ = clip(ρ, 0, 1)
+- α = clip(α, 0, 1)
 
-State predicates are mapped to signed values so that true and false conditions are distinguished explicitly. Compatibility for a pipeline C1 -> C2 is checked by ensuring that no effect of C1 contradicts a precondition of C2 and that all required data dependencies of C2 are either produced by C1 or supplied externally.
+Boolean state predicates are encoded as signed values so that true and false conditions are explicitly separated:
 
-Sequential composition combines two capabilities into a single capability. The later capability can override shared state variables, while the aggregated cost is the sum of the two components and the reliability/availability values are multiplied.
+- φ(s) = 1 if the predicate is true
+- φ(s) = -1 if the predicate is false
 
-Goal relevance is measured by cosine similarity between the effect-only vector of a capability and the goal vector. This produces a score in the range [0, 1], where a direct match gives 1.0 and a disjoint effect set gives 0.0.
+A pipeline C1 -> C2 is considered compatible when:
+
+- no effect of C1 contradicts a precondition of C2
+- every required input of C2 is either produced by C1 or supplied externally
+
+This can be expressed as:
+
+- Compatible(C1, C2) iff (no contradiction) ∧ (all required inputs satisfied)
+
+Sequential composition combines the two capabilities into one capability. The later capability overrides shared state variables, while the aggregated metrics are:
+
+- cost(C1 + C2) = cost(C1) + cost(C2)
+- reliability(C1 + C2) = reliability(C1) × reliability(C2)
+- availability(C1 + C2) = availability(C1) × availability(C2)
+
+Goal relevance is computed using cosine similarity between the effect-only vector of a capability and the goal vector:
+
+- sim(x, y) = (x · y) / (||x|| × ||y||)
+- relevance(C, G) = max(0, sim(e_C, g))
+
+This yields a score in the range [0, 1], where a direct effect match gives 1.0 and a disjoint effect set gives 0.0.
 
 ## Compatibility
 
